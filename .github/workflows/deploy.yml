@@ -1,0 +1,58 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  ACR_NAME: aihubprodacr
+  ACR_LOGIN_SERVER: aihubprodacr.azurecr.io
+  IMAGE_NAME: chapters-admin
+  RESOURCE_GROUP: CHAPTERS-AI-Hub
+  CONTAINER_APP_NAME: ca-chgadmin-prod
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Set image tag
+        id: tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "tag=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "latest=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            -t "${{ steps.tag.outputs.tag }}" \
+            -t "${{ steps.tag.outputs.latest }}" \
+            .
+          docker push "${{ steps.tag.outputs.tag }}"
+          docker push "${{ steps.tag.outputs.latest }}"
+
+      - name: Deploy to Container Apps
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image "${{ steps.tag.outputs.tag }}"
