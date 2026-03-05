@@ -33,7 +33,7 @@ async def chat_completions(
     is_stream = body.get("stream", False)
 
     if not is_stream:
-        return await client.post("/openai/chat/completions", json=body, timeout=120.0)
+        return await client.post("/api/chat/completions", json=body, timeout=120.0)
 
     # Streaming: proxy SSE chunks through
     async def event_generator():
@@ -44,7 +44,7 @@ async def chat_completions(
         async with httpx.AsyncClient(timeout=120.0) as http:
             async with http.stream(
                 "POST",
-                f"{client.base_url}/openai/chat/completions",
+                f"{client.base_url}/api/chat/completions",
                 json=body,
                 headers=headers,
             ) as resp:
